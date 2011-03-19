@@ -31,10 +31,11 @@ LINES = [numpy.eye(LINE_LENGTH, dtype=numpy.float32), # UL/BR diagonal
 
 def generate_sample_patch():
     patch = numpy.zeros((PATCH_SIZE, PATCH_SIZE), dtype=numpy.float32)
-    
-    for line_num in xrange(NUM_LINES_PER_PATCH):
+
+    distinct_lines = random.sample(LINES, NUM_LINES_PER_PATCH)
+
+    for line in distinct_lines:
         line_center = [random.randint(LINE_PERIPHERY_SIZE, LINE_PERIPHERY_SIZE + LINE_CENTER_SIZE) for dim in xrange(2)]
-        line = LINES[random.randint(0, len(LINES) - 1)]
         patch_area_slices = [slice(dim_center - HALF_LINE_LENGTH, dim_center + HALF_LINE_LENGTH + 1) for dim_center in line_center]
         patch[patch_area_slices] = numpy.maximum(patch[patch_area_slices], line)
     return patch
