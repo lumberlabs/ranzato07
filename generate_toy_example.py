@@ -57,7 +57,7 @@ def main(argv=None):
 
     sample_patches = numpy.asarray([generate_sample_patch() for sample_num in xrange(args.num_samples)])
     with open(args.output_filename, "wb") as outfile:
-        pickle.dump(sample_patches, outfile)
+        pickle.dump(sample_patches, outfile, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':
