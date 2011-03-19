@@ -3,13 +3,13 @@
 from __future__ import division
 
 import argparse
-import random
-import sys
-
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
+import random
+import sys
+
 import numpy
 
 PATCH_SIZE = 17
