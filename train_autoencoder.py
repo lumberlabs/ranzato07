@@ -27,7 +27,7 @@ class Encoder(object):
         self.init_encoder()
 
     def init_encoder(self):
-        batch = self.image.reshape((1, 1, 17, 17)) # batch size, num inp filters, h, w
+        batch = self.image.reshape((1, 1, self.image_shape[2], self.image_shape[3])) # batch size, num inp filters, h, w
         fan_in = numpy.prod(self.filter_shape[1:])
         W_bound = numpy.sqrt(6.0 / fan_in)
 
