@@ -27,28 +27,16 @@ class Encoder(object):
         W_bound = numpy.sqrt(6.0 / fan_in)
 
         W_values = numpy.asarray(numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
-        # print W_values.shape
         self.W = theano.shared(value=W_values)
 
-        # convolve input feature maps with filters
         self.conv_out = conv.conv2d(input=inp, filters=self.W, filter_shape=filter_shape, image_shape=image_shape)
 
         self.conv_out_shape = conv.ConvOp.getOutputShape(image_shape[2:4], filter_shape[2:4])
-        # print post_conv_size
-        # print filter_shape
-        # print image_shape
-        # 
-        # return conv_out
 
         conv_out_rasterized = self.conv_out.reshape((filter_shape[0], -1))
-
-        # y_max, self.argmax_y = T.max_and_argmax(self.conv_out, axis=-1)
-        # self.max, self.argmax_x = T.max_and_argmax(y_max, axis=-1)
         self.max, self.argmax = T.max_and_argmax(conv_out_rasterized, axis=-1)
 
 def train(training_data):
-    # print training_data
-    # print training_data.shape
     input_image = T.matrix("input_image")
     batch = input_image.reshape((1, 1, 17, 17)) # batch size, num inp filters, h, w
     filter_shape = (4, 1, 7, 7) # num filters, num inp filters, h, w
@@ -57,10 +45,10 @@ def train(training_data):
     out = encoder.conv_out
     g = theano.function(inputs=[input_image], outputs=[out, encoder.max, encoder.argmax])
     conv, conv_max, conv_argmax = g(training_data[0])
+    argmax_unraveled = [numpy.unravel_index(i, encoder.conv_out_shape) for i in conv_argmax]
     print conv.shape
     print conv_max
     print conv_argmax
-    argmax_unraveled = [numpy.unravel_index(i, encoder.conv_out_shape) for i in conv_argmax]
     print argmax_unraveled
     
 
