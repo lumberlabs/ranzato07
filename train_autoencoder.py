@@ -39,11 +39,11 @@ class Encoder(object):
         conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(self.image_shape[2:4], self.filter_shape[2:4])
 
         conv_out_rasterized = self.conv_out.reshape((self.filter_shape[0], -1))
-        self.max, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
+        max_vals, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
         argmax_x = argmax_raveled / conv_out_image_x
         argmax_y = argmax_raveled % conv_out_image_y
-        self.argmax = T.stack(argmax_x, argmax_y).T
-        self.encode = theano.function(inputs=[self.image], outputs=[self.max, self.argmax])
+        argmax = T.stack(argmax_x, argmax_y).T
+        self.encode = theano.function(inputs=[self.image], outputs=[max_vals, argmax])
 
 def train(training_data):
     input_image = T.matrix("input_image")
