@@ -9,12 +9,15 @@ except ImportError:
     import pickle
 import sys
 
+import PIL.Image
 import numpy
 import theano
 import theano.tensor as T
 import theano.tensor.signal.conv
 from theano.tensor.signal import downsample
 from theano.tensor.nnet import conv
+
+from utils import tile_raster_images
 
 floatX = theano.config.floatX
 
@@ -91,6 +94,15 @@ class Decoder(object):
     def decoder_energy(self, image):
         return ((image - self.decoded) ** 2).sum()
 
+def gradient_updates(score, params, learning_rate):
+    gradient_params = [T.grad(score, param) for param in params]
+
+    updates = {}
+    for param, gradient_params in zip(params, gradient_params):
+        updates[param] = param - learning_rate * gradient_params
+
+    return updates
+
 def train(training_data):
     input_image = T.matrix("input_image")
     filter_shape = (4, 1, 7, 7) # num filters, num inp filters, h, w
@@ -110,8 +122,6 @@ def train(training_data):
     # calc_encoder_energy = theano.function(inputs=[input_image, base_feature_weights],
     #                                       outputs=encoder_energy)
 
-    learning_rate = .01
-
     ideal_weights = theano.shared(name="ideal_weights", value=numpy.zeros((4,), dtype=floatX))
 
     decoder_for_ideal_weights = Decoder(ideal_weights, locations, encoder.W, image_shape, filter_shape)
@@ -121,31 +131,22 @@ def train(training_data):
     total_energy = encoder_energy + decoder_energy
 
     energy_params = [ideal_weights]
-    energy_gradient_params = [T.grad(total_energy, param) for param in energy_params]
-
-    energy_updates = {}
-    for param, energy_gradient_params in zip(energy_params, energy_gradient_params):
-        energy_updates[param] = param - learning_rate * energy_gradient_params
-
     step_energy = theano.function(inputs=[input_image, locations],
                                   outputs=total_energy,
-                                  updates=energy_updates)
+                                  updates=gradient_updates(total_energy, energy_params, learning_rate=0.05))
 
-    # decoder_params = decoder_for_ideal_weights.params
-    # decoder_gradient_params = [T.grad(decoder_energy, param) for param in decoder_params]
-    # 
-    # decoder_updates = {}
-    # for param, decoder_gradient_params in zip(decoder_params, decoder_gradient_params):
-    #     decoder_updates[param] = param - learning_rate * decoder_gradient_params
-    # 
-    # step_decoder = theano.function(inputs=[input_image, locations],
-    #                                outputs=total_energy,
-    #                                givens={features: ideal_weights},
-    #                                updates=energy_updates)
+    decoder_params = decoder_for_ideal_weights.params
+    step_decoder = theano.function(inputs=[input_image, locations],
+                                   outputs=decoder_energy,
+                                   updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.05))
+
+    encoder_params = encoder.params
+    step_encoder = theano.function(inputs=[input_image],
+                                   outputs=encoder_energy,
+                                   updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.05))
 
 
-
-    for image in training_data:
+    for image_index, image in enumerate(training_data):
         encoded_features, encoded_locations = encode(image)
         # decoded_image = decode(encoded_features, encoded_locations)
 
@@ -155,9 +156,27 @@ def train(training_data):
         keep_going = True
         while keep_going:
             current_energy = step_energy(image, encoded_locations)
-            print current_energy
             keep_going = current_energy != prior_energy # this is a hack
             prior_energy = current_energy
+
+        # print "TOTAL", current_energy
+        # 
+        # print "DECODER", step_decoder(image, encoded_locations)
+        # print "ENCODER", step_encoder(image)
+
+        if image_index % 25 == 0:
+            print "Dumping images at image index {i}".format(i=image_index)
+            image = PIL.Image.fromarray(tile_raster_images(X=encoder.W.get_value(),
+                                        img_shape=(7, 7),
+                                        tile_shape=(2, 2), 
+                                        tile_spacing=(1, 1)))
+            image.save("encoder_filters_{i}.png".format(i=image_index))
+            image = PIL.Image.fromarray(tile_raster_images(X=decoder_for_ideal_weights.W.get_value(),
+                                        img_shape=(7, 7),
+                                        tile_shape=(2, 2), 
+                                        tile_spacing=(1, 1)))
+            image.save("decoder_filters_{i}.png".format(i=image_index))
+
 
         # for x in xrange(500):
         #     print step_down_energy(image, encoded_locations)
