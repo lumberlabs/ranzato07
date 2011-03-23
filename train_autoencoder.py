@@ -24,27 +24,33 @@ floatX = theano.config.floatX
 
 class Encoder(object):
 
-    def __init__(self, image, filter_shape, image_shape):
-        self.numpy_rng = numpy.random.RandomState() #732)
+    def __init__(self, image_variable, filter_shape, image_shape, numpy_rng=None):
+        if numpy_rng is None:
+            numpy_rng = numpy.random.RandomState()
 
-        W_bound = 1 / 100.0
-        W_values = numpy.asarray(self.numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
-        self.W = theano.shared(name="W_c", value=W_values)
+        num_filters = filter_shape[0]
+        individual_filter_shape = filter_shape[1:]
 
-        self.conv_out = theano.tensor.signal.conv.conv2d(image, self.W)
+        # TODO: This is completely unmotivated. It comes purely from the observation that
+        # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 7**2. :/
+        fan_in = numpy.prod(individual_filter_shape)
+        filters_elem_bound = 1 / (2 * fan_in) 
+        filters_value = numpy.asarray(numpy_rng.uniform(low=-filters_elem_bound, high=filters_elem_bound, size=filter_shape), dtype=floatX)
 
+        self.filters = theano.shared(name="encoder_filters", value=filters_value)
+        convolved = theano.tensor.signal.conv.conv2d(image_variable, self.filters)
 
-        conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(image_shape, filter_shape[1:])
+        convolved_rows, convolved_cols = conv.ConvOp.getOutputShape(image_shape, individual_filter_shape)
 
-        conv_out_rasterized = self.conv_out.reshape((filter_shape[0], -1))
-        self.feature_weights, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
-        argmax_x = argmax_raveled // conv_out_image_x
-        argmax_y = argmax_raveled % conv_out_image_y
+        conv_out_rasterized = convolved.reshape((num_filters, -1))
+        self.code, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
+        argmax_x = argmax_raveled // convolved_rows
+        argmax_y = argmax_raveled % convolved_cols
         self.feature_locations = T.cast(T.stack(argmax_x, argmax_y).T, "int32") # I don't fully understand why this cast is necessary
-        self.params = [self.W]
+        self.params = [self.filters]
 
-    def encoder_energy(self, base_feature_weights):
-        return ((self.feature_weights - base_feature_weights) ** 2).sum()
+    def encoder_energy(self, wrt_code):
+        return ((self.code - wrt_code) ** 2).sum()
 
 def zeros_with_submatrix(submatrix, location, offset, submatrix_shape, destination_shape):
     assert all((d - 1) % 2 == 0 for d in submatrix_shape)
@@ -59,8 +65,9 @@ def zeros_with_submatrix(submatrix, location, offset, submatrix_shape, destinati
 
 class Decoder(object):
 
-    def __init__(self, features, locations, filters, image_shape, filter_shape):
-        self.numpy_rng = numpy.random.RandomState() #732)
+    def __init__(self, features, locations, filters, image_shape, filter_shape, numpy_rng=None):
+        if numpy_rng is None:
+            numpy_rng = numpy.random.RandomState()
 
         conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(image_shape, filter_shape[1:])
         conv_offset_x = (conv_out_image_x - image_shape[0]) // 2
@@ -68,7 +75,7 @@ class Decoder(object):
         conv_offset = (conv_offset_x, conv_offset_y)
 
         W_bound = 1 / 100.0
-        W_values = numpy.asarray(self.numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
+        W_values = numpy.asarray(numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
         self.W = theano.shared(name="W_d", value=W_values)
 
         def accumulate(feature_weight, location, template, acc_at_time_i):
@@ -103,14 +110,14 @@ def train(training_data,
     filter_shape = (4, 7, 7) # num filters, h, w
     image_shape = (17, 17) # h, w
     encoder = Encoder(input_image, filter_shape, image_shape)
-    encode = theano.function(inputs=[input_image], outputs=[encoder.feature_weights, encoder.feature_locations])
+    encode = theano.function(inputs=[input_image], outputs=[encoder.code, encoder.feature_locations])
 
     features = T.vector("features")
     locations = T.imatrix("locations")
 
     ideal_weights = theano.shared(name="ideal_weights", value=numpy.zeros((4,), dtype=floatX))
 
-    decoder_for_ideal_weights = Decoder(ideal_weights, locations, encoder.W, image_shape, filter_shape)
+    decoder_for_ideal_weights = Decoder(ideal_weights, locations, encoder.filters, image_shape, filter_shape)
     decoder_energy = decoder_for_ideal_weights.decoder_energy(input_image)
     encoder_energy = encoder.encoder_energy(ideal_weights)
 
@@ -161,7 +168,7 @@ def train(training_data,
 
         if output_directory is not None and image_index % filter_save_frequency == 0:
             print "Saving filters at image index {i}".format(i=image_index)
-            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.W.get_value(), decoder_for_ideal_weights.W.get_value()],
+            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.filters.get_value(), decoder_for_ideal_weights.W.get_value()],
                                         img_shape=(7, 7),
                                         tile_shape=(2, 4), 
                                         tile_spacing=(1, 1)))
