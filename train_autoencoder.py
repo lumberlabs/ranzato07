@@ -69,8 +69,8 @@ def zeros_with_submatrix(submatrix, center_location, offset, submatrix_shape, de
     pre_convolve_shape = tuple(d - s + 1 for s, d in zip(submatrix_shape, destination_shape))
     dest = T.zeros(pre_convolve_shape)
     submatrix_offset = tuple((dim - 1) // 2 for dim in submatrix_shape)
-    dest_with_one = T.set_subtensor(dest[center_location[0] + offset[0] - submatrix_offset[0],
-                                         center_location[1] + offset[1] - submatrix_offset[1]], 1.0)
+    dest_with_one = T.set_subtensor(dest[center_location[0] + offset[0] + submatrix_offset[0],
+                                         center_location[1] + offset[1] + submatrix_offset[1]], 1.0)
     convolved = theano.tensor.signal.conv.conv2d(dest_with_one, submatrix, border_mode="full")
     convolved_shape_fixed = convolved.reshape(destination_shape)
     return convolved_shape_fixed
