@@ -100,25 +100,75 @@ def train(training_data):
 
     features = T.vector("features")
     locations = T.imatrix("locations")
-    decoder = Decoder(features, locations, encoder.W, image_shape, filter_shape)
-    decode = theano.function(inputs=[features, locations],
-                             outputs=decoder.decoded)
-    decoder_energy = decoder.decoder_energy(input_image)
-    calc_decoder_energy = theano.function(inputs=[features, locations, input_image],
-                                          outputs=decoder_energy)
+    simple_decoder = Decoder(features, locations, encoder.W, image_shape, filter_shape)
+    # decode = theano.function(inputs=[input_image, features, locations],
+    #                          outputs=decoder.decoded)
+    # calc_decoder_energy = theano.function(inputs=[input_image, features, locations],
+    #                                       outputs=decoder_energy)
 
-    base_feature_weights = T.vector("base_feature_weights")
-    encoder_energy = encoder.encoder_energy(base_feature_weights)
-    calc_encoder_energy = theano.function(inputs=[input_image, base_feature_weights],
-                                          outputs=encoder_energy)
+    # base_feature_weights = T.vector("base_feature_weights")
+    # calc_encoder_energy = theano.function(inputs=[input_image, base_feature_weights],
+    #                                       outputs=encoder_energy)
+
+    learning_rate = .01
+
+    ideal_weights = theano.shared(name="ideal_weights", value=numpy.zeros((4,), dtype=floatX))
+
+    decoder_for_ideal_weights = Decoder(ideal_weights, locations, encoder.W, image_shape, filter_shape)
+    decoder_energy = decoder_for_ideal_weights.decoder_energy(input_image)
+    encoder_energy = encoder.encoder_energy(ideal_weights)
+
+    total_energy = encoder_energy + decoder_energy
+
+    energy_params = [ideal_weights]
+    energy_gradient_params = [T.grad(total_energy, param) for param in energy_params]
+
+    energy_updates = {}
+    for param, energy_gradient_params in zip(energy_params, energy_gradient_params):
+        energy_updates[param] = param - learning_rate * energy_gradient_params
+
+    step_energy = theano.function(inputs=[input_image, locations],
+                                  outputs=total_energy,
+                                  updates=energy_updates)
+
+    # decoder_params = decoder_for_ideal_weights.params
+    # decoder_gradient_params = [T.grad(decoder_energy, param) for param in decoder_params]
+    # 
+    # decoder_updates = {}
+    # for param, decoder_gradient_params in zip(decoder_params, decoder_gradient_params):
+    #     decoder_updates[param] = param - learning_rate * decoder_gradient_params
+    # 
+    # step_decoder = theano.function(inputs=[input_image, locations],
+    #                                outputs=total_energy,
+    #                                givens={features: ideal_weights},
+    #                                updates=energy_updates)
+
+
 
     for image in training_data:
         encoded_features, encoded_locations = encode(image)
-        print encoded_features
-        print encoded_locations
-        print decode(encoded_features, encoded_locations)
-        print calc_decoder_energy(encoded_features, encoded_locations, image)
-        print calc_encoder_energy(image, encoded_features)
+        # decoded_image = decode(encoded_features, encoded_locations)
+
+        ideal_weights.set_value(encoded_features)
+
+        prior_energy = float("inf")
+        keep_going = True
+        while keep_going:
+            current_energy = step_energy(image, encoded_locations)
+            print current_energy
+            keep_going = current_energy != prior_energy # this is a hack
+            prior_energy = current_energy
+
+        # for x in xrange(500):
+        #     print step_down_energy(image, encoded_locations)
+
+        # print decoded_image
+        # 
+        # print encoded_features
+        # print encoded_locations
+        # print decoded_image
+        # print calc_decoder_energy(encoded_features, encoded_locations, image)
+        # print calc_encoder_energy(image, encoded_features)
 
 def main(argv=None):
     if argv is None:
