@@ -70,9 +70,9 @@ class Decoder(object):
         self.numpy_rng = numpy.random.RandomState() #732)
 
         conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(image_shape[2:4], filter_shape[2:4])
-        conv_offset_x = (image_shape[2] - conv_out_image_x) // 2
-        conv_offset_y = (image_shape[3] - conv_out_image_y) // 2
-        conv_offset = (-conv_offset_x, -conv_offset_y)
+        conv_offset_x = (conv_out_image_x - image_shape[2]) // 2
+        conv_offset_y = (conv_out_image_y - image_shape[3]) // 2
+        conv_offset = (conv_offset_x, conv_offset_y)
 
         # fan_in = numpy.prod(filter_shape[1:])
         # W_bound = numpy.sqrt(6.0 / fan_in)
