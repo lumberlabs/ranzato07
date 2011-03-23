@@ -37,34 +37,47 @@ class Encoder(object):
         filters_value = numpy.asarray(numpy_rng.uniform(low=-filters_elem_bound, high=filters_elem_bound, size=filter_shape), dtype=floatX)
 
         self.filters = theano.shared(name="encoder_filters", value=filters_value)
-        convolved = theano.tensor.signal.conv.conv2d(image_variable, self.filters)
 
+        convolved = theano.tensor.signal.conv.conv2d(image_variable, self.filters)
         convolved_rows, convolved_cols = theano.tensor.nnet.conv.ConvOp.getOutputShape(image_shape, individual_filter_shape)
 
-        conv_out_rasterized = convolved.reshape((num_filters, -1))
-        self.code, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
-        argmax_x = argmax_raveled // convolved_rows
-        argmax_y = argmax_raveled % convolved_cols
-        self.feature_locations = T.cast(T.stack(argmax_x, argmax_y).T, "int32") # I don't fully understand why this cast is necessary
+        # rasterize each convolved image, since max_and_argmax doesn't accept multiple axes
+        convolved_rasterized = convolved.reshape((num_filters, -1))
+        self.code, argmax_raveled = T.max_and_argmax(convolved_rasterized, axis=-1)
+
+        # now unravel the argmax value to undo the rasterization
+        argmax_row = argmax_raveled // convolved_rows
+        argmax_col = argmax_raveled % convolved_rows
+        locations_upcast = T.stack(argmax_row, argmax_col).T
+
+        self.locations = T.cast(locations_upcast, "int32") # the // and % upcast from int32 to int64; cast back down
+
         self.params = [self.filters]
 
     def encoder_energy(self, wrt_code):
         return ((self.code - wrt_code) ** 2).sum()
 
-def zeros_with_submatrix(submatrix, location, offset, submatrix_shape, destination_shape):
-    assert all((d - 1) % 2 == 0 for d in submatrix_shape)
+def zeros_with_submatrix(submatrix, center_location, offset, submatrix_shape, destination_shape):
+    """
+    Helper function to fill a large matrix with zeros, and set a subportion of it to match a provided submatrix.
+    """
+    # allow no even dimensions in submatrix -- then there is no clean center
+    assert all((dim - 1) % 2 == 0 for dim in submatrix_shape)
+
+    # strategy: make a target destination that is smaller by just the right amount,
+    # insert a 1 at the right point, then convolve
     pre_convolve_shape = tuple(d - s + 1 for s, d in zip(submatrix_shape, destination_shape))
     dest = T.zeros(pre_convolve_shape)
-    submatrix_offset = tuple((d - 1) // 2 for d in submatrix_shape)
-    dest_with_one = T.set_subtensor(dest[location[0] + offset[0] - submatrix_offset[0],
-                                         location[1] + offset[1] - submatrix_offset[1]], 1.0)
+    submatrix_offset = tuple((dim - 1) // 2 for dim in submatrix_shape)
+    dest_with_one = T.set_subtensor(dest[center_location[0] + offset[0] - submatrix_offset[0],
+                                         center_location[1] + offset[1] - submatrix_offset[1]], 1.0)
     convolved = theano.tensor.signal.conv.conv2d(dest_with_one, submatrix, border_mode="full")
     convolved_shape_fixed = convolved.reshape(destination_shape)
     return convolved_shape_fixed
 
 class Decoder(object):
 
-    def __init__(self, features, locations, filters, image_shape, filter_shape, numpy_rng=None):
+    def __init__(self, code, locations, filters, image_shape, filter_shape, numpy_rng=None):
         if numpy_rng is None:
             numpy_rng = numpy.random.RandomState()
 
@@ -84,7 +97,7 @@ class Decoder(object):
 
         scan_result, scan_updates = theano.scan(fn=accumulate,
                                                 outputs_info=T.zeros(image_shape, dtype=floatX),
-                                                sequences=[features, locations, self.W])
+                                                sequences=[code, locations, self.W])
 
         self.decoded = scan_result[-1]
         self.params = [self.W]
@@ -109,7 +122,7 @@ def train(training_data,
     filter_shape = (4, 7, 7) # num filters, h, w
     image_shape = (17, 17) # h, w
     encoder = Encoder(input_image, filter_shape, image_shape)
-    encode = theano.function(inputs=[input_image], outputs=[encoder.code, encoder.feature_locations])
+    encode = theano.function(inputs=[input_image], outputs=[encoder.code, encoder.locations])
 
     features = T.vector("features")
     locations = T.imatrix("locations")
