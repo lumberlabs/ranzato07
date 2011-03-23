@@ -197,7 +197,11 @@ def train(training_data,
         if output_directory is not None and image_index % filter_save_frequency == 0:
             print "Saving filters at image {i}".format(i=image_index)
             print "Total energy at image {i} is {e}".format(i=image_index, e=current_energy)
-            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.filters.get_value(), decoder_using_optimal_code.filters.get_value()],
+            encoder_filters = encoder.filters.get_value()
+            decoder_filters = decoder_using_optimal_code.filters.get_value()
+            print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
+            print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
+            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder_filters, decoder_filters],
                                         img_shape=(7, 7),
                                         tile_shape=(2, num_filters), 
                                         tile_spacing=(1, 1)))
