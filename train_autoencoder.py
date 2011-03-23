@@ -77,7 +77,7 @@ def zeros_with_submatrix(submatrix, center_location, offset, submatrix_shape, de
 
 class Decoder(object):
 
-    def __init__(self, code, locations, filters, image_shape, filter_shape, numpy_rng=None):
+    def __init__(self, code, locations, image_shape, filter_shape, numpy_rng=None):
         if numpy_rng is None:
             numpy_rng = numpy.random.RandomState()
 
@@ -129,21 +129,23 @@ def train(training_data,
           filter_save_frequency=None):
 
     image_variable = T.matrix("image")
-    filter_shape = (4, 7, 7) # num filters, r, c
+    num_filters = 4
+    filter_shape = (num_filters, 7, 7) # num filters, r, c
     image_shape = (17, 17) # r, c
     encoder = Encoder(image_variable, filter_shape, image_shape)
     encode = theano.function(inputs=[image_variable], outputs=[encoder.code, encoder.locations])
 
-    features = T.vector("features")
-    locations = T.imatrix("locations")
+    locations_variable = T.imatrix("locations")
 
-    ideal_weights = theano.shared(name="ideal_weights", value=numpy.zeros((4,), dtype=floatX))
+    optimal_code = theano.shared(name="optimal_code", value=numpy.zeros((num_filters,), dtype=floatX))
 
-    decoder_for_ideal_weights = Decoder(ideal_weights, locations, encoder.filters, image_shape, filter_shape)
-    decoder_energy = decoder_for_ideal_weights.decoder_energy(image_variable)
-    encoder_energy = encoder.encoder_energy(ideal_weights)
+    # to create a decoder using the encoder's produced code, you'd do something similar, but use
+    # encoder.code instead of optimal_code
+    decoder_using_optimal_code = Decoder(optimal_code, locations_variable, image_shape, filter_shape)
 
-    L1_code_penalty = abs(ideal_weights).sum()
+    decoder_energy = decoder_using_optimal_code.decoder_energy(image_variable) # compare with original input image
+    encoder_energy = encoder.encoder_energy(optimal_code) # compare against a calculated optimal code
+    L1_code_penalty = abs(optimal_code).sum()
 
     encoder_energy_weight = 5
     decoder_energy_weight = 1
@@ -153,13 +155,13 @@ def train(training_data,
                    decoder_energy_weight * decoder_energy + \
                    L1_code_penalty_weight * L1_code_penalty
 
-    energy_params = [ideal_weights]
-    step_energy = theano.function(inputs=[image_variable, locations],
+    energy_params = [optimal_code]
+    step_energy = theano.function(inputs=[image_variable, locations_variable],
                                   outputs=total_energy,
                                   updates=gradient_updates(total_energy, energy_params, learning_rate=0.05))
 
-    decoder_params = decoder_for_ideal_weights.params
-    step_decoder = theano.function(inputs=[image_variable, locations],
+    decoder_params = decoder_using_optimal_code.params
+    step_decoder = theano.function(inputs=[image_variable, locations_variable],
                                    outputs=decoder_energy,
                                    updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.01))
 
@@ -173,11 +175,13 @@ def train(training_data,
         os.makedirs(output_directory)
 
     for image_index, image in enumerate(training_data):
-        encoded_features, encoded_locations = encode(image)
-        # decoded_image = decode(encoded_features, encoded_locations)
+        encoded_code, encoded_locations = encode(image)
 
-        ideal_weights.set_value(encoded_features)
+        # copy the actual code to the optimal code, to be optimized
+        optimal_code.set_value(encoded_code)
 
+        # hack: search for optimal code only so long as we're making immediate progress
+        # todo: incorporate patience here
         prior_energy = float("inf")
         keep_going = True
         while keep_going:
@@ -185,14 +189,17 @@ def train(training_data,
             keep_going = current_energy < prior_energy
             prior_energy = current_energy
 
+        # found the optimal code; now take a single gradient descent step for decoder and encoder
         decoder_energy = step_decoder(image, encoded_locations)
         encoder_energy = step_encoder(image)
 
+        # write filters to file, for visualization
         if output_directory is not None and image_index % filter_save_frequency == 0:
-            print "Saving filters at image index {i}".format(i=image_index)
-            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.filters.get_value(), decoder_for_ideal_weights.filters.get_value()],
+            print "Saving filters at image {i}".format(i=image_index)
+            print "Total energy at image {i} is {e}".format(i=image_index, e=current_energy)
+            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.filters.get_value(), decoder_using_optimal_code.filters.get_value()],
                                         img_shape=(7, 7),
-                                        tile_shape=(2, 4), 
+                                        tile_shape=(2, num_filters), 
                                         tile_spacing=(1, 1)))
             image_filename = os.path.join(output_directory, "filters_{i}.png".format(i=image_index))
             image.save(image_filename)
@@ -220,7 +227,6 @@ def main(argv=None):
         training_data = pickle.load(f)
 
     train(training_data, output_directory=args.output_directory, filter_save_frequency=args.filter_save_frequency)
-
 
 if __name__ == '__main__':
     sys.exit(main())
