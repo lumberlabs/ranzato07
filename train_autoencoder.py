@@ -130,7 +130,15 @@ def train(training_data):
     decoder_energy = decoder_for_ideal_weights.decoder_energy(input_image)
     encoder_energy = encoder.encoder_energy(ideal_weights)
 
-    total_energy = encoder_energy + decoder_energy
+    L1_code_penalty = abs(ideal_weights).sum()
+
+    encoder_energy_weight = 5
+    decoder_energy_weight = 1
+    L1_code_penalty_weight = 2
+
+    total_energy = encoder_energy_weight * encoder_energy + \
+                   decoder_energy_weight * decoder_energy + \
+                   L1_code_penalty_weight * L1_code_penalty
 
     energy_params = [ideal_weights]
     step_energy = theano.function(inputs=[input_image, locations],
