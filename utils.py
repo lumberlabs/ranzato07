@@ -6,6 +6,10 @@ For example ``tile_raster_images`` helps in generating a easy to grasp
 image from a set of samples or weights.
 """
 
+"""
+Borrowed w/o modification (aside from this comment) from the Deep Learning Tutorials.
+"""
+
 
 import numpy
 
