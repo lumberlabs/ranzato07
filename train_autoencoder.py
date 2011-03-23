@@ -40,11 +40,14 @@ class Encoder(object):
         conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(self.image_shape[2:4], self.filter_shape[2:4])
 
         conv_out_rasterized = self.conv_out.reshape((self.filter_shape[0], -1))
-        max_vals, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
+        self.feature_weights, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
         argmax_x = argmax_raveled // conv_out_image_x
         argmax_y = argmax_raveled % conv_out_image_y
-        argmax = T.cast(T.stack(argmax_x, argmax_y).T, "int32") # I don't fully understand why this cast is necessary
-        self.encode = theano.function(inputs=[self.image], outputs=[max_vals, argmax])
+        self.feature_locations = T.cast(T.stack(argmax_x, argmax_y).T, "int32") # I don't fully understand why this cast is necessary
+        self.params = [self.W]
+
+    def encoder_energy(self, base_feature_weights):
+        return ((self.feature_weights - base_feature_weights) ** 2).sum()
 
 def zeros_with_submatrix(submatrix, location, offset, submatrix_shape, destination_shape):
     assert all((d - 1) % 2 == 0 for d in submatrix_shape)
@@ -82,24 +85,40 @@ class Decoder(object):
                                                 outputs_info=T.zeros(image_shape[2:], dtype=floatX),
                                                 sequences=[features, locations, self.W])
 
-        self.decode = theano.function(inputs=[features, locations],
-                                      outputs=[scan_result[-1]],
-                                      updates=scan_updates)
+        self.decoded = scan_result[-1]
+        self.params = [self.W]
 
+    def decoder_energy(self, image):
+        return ((image - self.decoded) ** 2).sum()
 
 def train(training_data):
     input_image = T.matrix("input_image")
     filter_shape = (4, 1, 7, 7) # num filters, num inp filters, h, w
     image_shape = (1, 1, 17, 17) # batch size, num inp filters, h, w
     encoder = Encoder(input_image, filter_shape, image_shape)
-    encoded_features, encoded_locations = encoder.encode(training_data[0])
-    print encoded_features
-    print encoded_locations
+    encode = theano.function(inputs=[input_image], outputs=[encoder.feature_weights, encoder.feature_locations])
 
     features = T.vector("features")
     locations = T.imatrix("locations")
     decoder = Decoder(features, locations, encoder.W, image_shape, filter_shape)
-    print decoder.decode(encoded_features, encoded_locations)
+    decode = theano.function(inputs=[features, locations],
+                             outputs=decoder.decoded)
+    decoder_energy = decoder.decoder_energy(input_image)
+    calc_decoder_energy = theano.function(inputs=[features, locations, input_image],
+                                          outputs=decoder_energy)
+
+    base_feature_weights = T.vector("base_feature_weights")
+    encoder_energy = encoder.encoder_energy(base_feature_weights)
+    calc_encoder_energy = theano.function(inputs=[input_image, base_feature_weights],
+                                          outputs=encoder_energy)
+
+    for image in training_data:
+        encoded_features, encoded_locations = encode(image)
+        print encoded_features
+        print encoded_locations
+        print decode(encoded_features, encoded_locations)
+        print calc_decoder_energy(encoded_features, encoded_locations, image)
+        print calc_encoder_energy(image, encoded_features)
 
 def main(argv=None):
     if argv is None:
