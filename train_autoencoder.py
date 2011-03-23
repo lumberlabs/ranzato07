@@ -166,8 +166,9 @@ def train(training_data):
         encoder_energy = step_encoder(image)
         # print "ENCODER", encoder_energy
 
-        if image_index % 25 == 0:
+        if image_index % 100 == 0:
             print "Dumping images at image index {i}".format(i=image_index)
+            print "Ideal code", ideal_weights.get_value()
             image = PIL.Image.fromarray(tile_raster_images(X=encoder.W.get_value(),
                                         img_shape=(7, 7),
                                         tile_shape=(2, 2), 
