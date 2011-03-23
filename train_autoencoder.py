@@ -156,13 +156,15 @@ def train(training_data):
         keep_going = True
         while keep_going:
             current_energy = step_energy(image, encoded_locations)
-            keep_going = current_energy != prior_energy # this is a hack
+            keep_going = current_energy < prior_energy
             prior_energy = current_energy
 
         # print "TOTAL", current_energy
         # 
-        # print "DECODER", step_decoder(image, encoded_locations)
-        # print "ENCODER", step_encoder(image)
+        decoder_energy = step_decoder(image, encoded_locations)
+        # print "DECODER", decoder_energy
+        encoder_energy = step_encoder(image)
+        # print "ENCODER", encoder_energy
 
         if image_index % 25 == 0:
             print "Dumping images at image index {i}".format(i=image_index)
