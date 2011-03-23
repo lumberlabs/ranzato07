@@ -26,25 +26,17 @@ class Encoder(object):
 
     def __init__(self, image, filter_shape, image_shape):
         self.numpy_rng = numpy.random.RandomState() #732)
-        self.filter_shape = filter_shape
-        self.image_shape = image_shape
 
-        assert image_shape[1] == filter_shape[1]
-        self.image = image
-
-        batch = self.image.reshape((1, 1, self.image_shape[2], self.image_shape[3])) # batch size, num inp filters, h, w
-
-        # fan_in = numpy.prod(self.filter_shape[1:])
-        # W_bound = numpy.sqrt(6.0 / fan_in)
         W_bound = 1 / 100.0
-        W_values = numpy.asarray(self.numpy_rng.uniform(low=-W_bound, high=W_bound, size=self.filter_shape), dtype=floatX)
+        W_values = numpy.asarray(self.numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
         self.W = theano.shared(name="W_c", value=W_values)
 
-        self.conv_out = conv.conv2d(input=batch, filters=self.W, filter_shape=self.filter_shape, image_shape=self.image_shape)
+        self.conv_out = theano.tensor.signal.conv.conv2d(image, self.W)
 
-        conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(self.image_shape[2:4], self.filter_shape[2:4])
 
-        conv_out_rasterized = self.conv_out.reshape((self.filter_shape[0], -1))
+        conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(image_shape, filter_shape[1:])
+
+        conv_out_rasterized = self.conv_out.reshape((filter_shape[0], -1))
         self.feature_weights, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
         argmax_x = argmax_raveled // conv_out_image_x
         argmax_y = argmax_raveled % conv_out_image_y
@@ -70,25 +62,22 @@ class Decoder(object):
     def __init__(self, features, locations, filters, image_shape, filter_shape):
         self.numpy_rng = numpy.random.RandomState() #732)
 
-        conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(image_shape[2:4], filter_shape[2:4])
-        conv_offset_x = (conv_out_image_x - image_shape[2]) // 2
-        conv_offset_y = (conv_out_image_y - image_shape[3]) // 2
+        conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(image_shape, filter_shape[1:])
+        conv_offset_x = (conv_out_image_x - image_shape[0]) // 2
+        conv_offset_y = (conv_out_image_y - image_shape[1]) // 2
         conv_offset = (conv_offset_x, conv_offset_y)
 
-        # fan_in = numpy.prod(filter_shape[1:])
-        # W_bound = numpy.sqrt(6.0 / fan_in)
         W_bound = 1 / 100.0
         W_values = numpy.asarray(self.numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
-        # W_values = numpy.ones(shape=filter_shape, dtype=floatX)
         self.W = theano.shared(name="W_d", value=W_values)
 
         def accumulate(feature_weight, location, template, acc_at_time_i):
-            filter_to_add = template[0] * feature_weight
-            addend = zeros_with_submatrix(filter_to_add, location, conv_offset, filter_shape[2:4], (17, 17))
+            filter_to_add = template * feature_weight
+            addend = zeros_with_submatrix(filter_to_add, location, conv_offset, filter_shape[1:], (17, 17))
             return acc_at_time_i + addend
 
         scan_result, scan_updates = theano.scan(fn=accumulate,
-                                                outputs_info=T.zeros(image_shape[2:], dtype=floatX),
+                                                outputs_info=T.zeros(image_shape, dtype=floatX),
                                                 sequences=[features, locations, self.W])
 
         self.decoded = scan_result[-1]
@@ -111,22 +100,13 @@ def train(training_data,
           filter_save_frequency=None):
   
     input_image = T.matrix("input_image")
-    filter_shape = (4, 1, 7, 7) # num filters, num inp filters, h, w
-    image_shape = (1, 1, 17, 17) # batch size, num inp filters, h, w
+    filter_shape = (4, 7, 7) # num filters, h, w
+    image_shape = (17, 17) # h, w
     encoder = Encoder(input_image, filter_shape, image_shape)
     encode = theano.function(inputs=[input_image], outputs=[encoder.feature_weights, encoder.feature_locations])
 
     features = T.vector("features")
     locations = T.imatrix("locations")
-    # simple_decoder = Decoder(features, locations, encoder.W, image_shape, filter_shape)
-    # decode = theano.function(inputs=[input_image, features, locations],
-    #                          outputs=decoder.decoded)
-    # calc_decoder_energy = theano.function(inputs=[input_image, features, locations],
-    #                                       outputs=decoder_energy)
-
-    # base_feature_weights = T.vector("base_feature_weights")
-    # calc_encoder_energy = theano.function(inputs=[input_image, base_feature_weights],
-    #                                       outputs=encoder_energy)
 
     ideal_weights = theano.shared(name="ideal_weights", value=numpy.zeros((4,), dtype=floatX))
 
@@ -159,7 +139,7 @@ def train(training_data,
                                    outputs=encoder_energy,
                                    updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.01))
 
-    if output_directory is not None:
+    if output_directory is not None and not os.path.isdir(output_directory):
         print "Creating output directory {d}".format(d=output_directory)
         os.makedirs(output_directory)
 
