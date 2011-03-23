@@ -81,29 +81,39 @@ class Decoder(object):
         if numpy_rng is None:
             numpy_rng = numpy.random.RandomState()
 
-        conv_out_image_x, conv_out_image_y = theano.tensor.nnet.conv.ConvOp.getOutputShape(image_shape, filter_shape[1:])
-        conv_offset_x = (conv_out_image_x - image_shape[0]) // 2
-        conv_offset_y = (conv_out_image_y - image_shape[1]) // 2
-        conv_offset = (conv_offset_x, conv_offset_y)
+        # TODO: This is copied and pasted directly from the Encoder. Make it DRY. How to do so cleanly?
 
-        W_bound = 1 / 100.0
-        W_values = numpy.asarray(numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
-        self.W = theano.shared(name="W_d", value=W_values)
+        num_filters = filter_shape[0]
+        individual_filter_shape = filter_shape[1:]
 
-        def accumulate(feature_weight, location, template, acc_at_time_i):
-            filter_to_add = template * feature_weight
-            addend = zeros_with_submatrix(filter_to_add, location, conv_offset, filter_shape[1:], (17, 17))
-            return acc_at_time_i + addend
+        # TODO: This is completely unmotivated. It comes purely from the observation that
+        # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 2 * 7 * 7. :/
+        fan_in = numpy.prod(individual_filter_shape)
+        filters_elem_bound = 1 / (2 * fan_in) 
+        filters_value = numpy.asarray(numpy_rng.uniform(low=-filters_elem_bound, high=filters_elem_bound, size=filter_shape), dtype=floatX)
+
+        self.filters = theano.shared(name="decoder_filters", value=filters_value)
+
+        convolved_dims = theano.tensor.nnet.conv.ConvOp.getOutputShape(image_shape, individual_filter_shape)
+
+        # calculate the offset induced by the fact that the convolved row/col offsets are smaller because
+        # the convolution changed the matrix size
+        conv_offset = tuple((convolved_dim - image_dim) // 2 for convolved_dim, image_dim in zip(convolved_dims, image_shape))
+
+        def accumulate(code_elem, location, template, accumulated_so_far):
+            filter_to_add = code_elem * template
+            addend = zeros_with_submatrix(filter_to_add, location, conv_offset, individual_filter_shape, image_shape)
+            return accumulated_so_far + addend
 
         scan_result, scan_updates = theano.scan(fn=accumulate,
                                                 outputs_info=T.zeros(image_shape, dtype=floatX),
-                                                sequences=[code, locations, self.W])
+                                                sequences=[code, locations, self.filters])
 
         self.decoded = scan_result[-1]
-        self.params = [self.W]
+        self.params = [self.filters]
 
-    def decoder_energy(self, image):
-        return ((image - self.decoded) ** 2).sum()
+    def decoder_energy(self, wrt_image):
+        return ((self.decoded - wrt_image) ** 2).sum()
 
 def gradient_updates(score, params, learning_rate):
     gradient_params = [T.grad(score, param) for param in params]
@@ -117,12 +127,12 @@ def gradient_updates(score, params, learning_rate):
 def train(training_data,
           output_directory=None,
           filter_save_frequency=None):
-  
-    input_image = T.matrix("input_image")
-    filter_shape = (4, 7, 7) # num filters, h, w
-    image_shape = (17, 17) # h, w
-    encoder = Encoder(input_image, filter_shape, image_shape)
-    encode = theano.function(inputs=[input_image], outputs=[encoder.code, encoder.locations])
+
+    image_variable = T.matrix("image")
+    filter_shape = (4, 7, 7) # num filters, r, c
+    image_shape = (17, 17) # r, c
+    encoder = Encoder(image_variable, filter_shape, image_shape)
+    encode = theano.function(inputs=[image_variable], outputs=[encoder.code, encoder.locations])
 
     features = T.vector("features")
     locations = T.imatrix("locations")
@@ -130,7 +140,7 @@ def train(training_data,
     ideal_weights = theano.shared(name="ideal_weights", value=numpy.zeros((4,), dtype=floatX))
 
     decoder_for_ideal_weights = Decoder(ideal_weights, locations, encoder.filters, image_shape, filter_shape)
-    decoder_energy = decoder_for_ideal_weights.decoder_energy(input_image)
+    decoder_energy = decoder_for_ideal_weights.decoder_energy(image_variable)
     encoder_energy = encoder.encoder_energy(ideal_weights)
 
     L1_code_penalty = abs(ideal_weights).sum()
@@ -144,17 +154,17 @@ def train(training_data,
                    L1_code_penalty_weight * L1_code_penalty
 
     energy_params = [ideal_weights]
-    step_energy = theano.function(inputs=[input_image, locations],
+    step_energy = theano.function(inputs=[image_variable, locations],
                                   outputs=total_energy,
                                   updates=gradient_updates(total_energy, energy_params, learning_rate=0.05))
 
     decoder_params = decoder_for_ideal_weights.params
-    step_decoder = theano.function(inputs=[input_image, locations],
+    step_decoder = theano.function(inputs=[image_variable, locations],
                                    outputs=decoder_energy,
                                    updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.01))
 
     encoder_params = encoder.params
-    step_encoder = theano.function(inputs=[input_image],
+    step_encoder = theano.function(inputs=[image_variable],
                                    outputs=encoder_energy,
                                    updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.01))
 
@@ -180,7 +190,7 @@ def train(training_data,
 
         if output_directory is not None and image_index % filter_save_frequency == 0:
             print "Saving filters at image index {i}".format(i=image_index)
-            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.filters.get_value(), decoder_for_ideal_weights.W.get_value()],
+            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.filters.get_value(), decoder_for_ideal_weights.filters.get_value()],
                                         img_shape=(7, 7),
                                         tile_shape=(2, 4), 
                                         tile_spacing=(1, 1)))
