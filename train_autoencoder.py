@@ -14,9 +14,8 @@ import PIL.Image
 import numpy
 import theano
 import theano.tensor as T
-import theano.tensor.signal.conv
-from theano.tensor.signal import downsample
-from theano.tensor.nnet import conv
+import theano.tensor.signal.conv # for convolutions
+import theano.tensor.nnet.conv # for getOutputShape
 
 from utils import tile_raster_images
 
@@ -32,7 +31,7 @@ class Encoder(object):
         individual_filter_shape = filter_shape[1:]
 
         # TODO: This is completely unmotivated. It comes purely from the observation that
-        # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 7**2. :/
+        # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 2 * 7 * 7. :/
         fan_in = numpy.prod(individual_filter_shape)
         filters_elem_bound = 1 / (2 * fan_in) 
         filters_value = numpy.asarray(numpy_rng.uniform(low=-filters_elem_bound, high=filters_elem_bound, size=filter_shape), dtype=floatX)
@@ -40,7 +39,7 @@ class Encoder(object):
         self.filters = theano.shared(name="encoder_filters", value=filters_value)
         convolved = theano.tensor.signal.conv.conv2d(image_variable, self.filters)
 
-        convolved_rows, convolved_cols = conv.ConvOp.getOutputShape(image_shape, individual_filter_shape)
+        convolved_rows, convolved_cols = theano.tensor.nnet.conv.ConvOp.getOutputShape(image_shape, individual_filter_shape)
 
         conv_out_rasterized = convolved.reshape((num_filters, -1))
         self.code, argmax_raveled = T.max_and_argmax(conv_out_rasterized, axis=-1)
@@ -69,7 +68,7 @@ class Decoder(object):
         if numpy_rng is None:
             numpy_rng = numpy.random.RandomState()
 
-        conv_out_image_x, conv_out_image_y = conv.ConvOp.getOutputShape(image_shape, filter_shape[1:])
+        conv_out_image_x, conv_out_image_y = theano.tensor.nnet.conv.ConvOp.getOutputShape(image_shape, filter_shape[1:])
         conv_offset_x = (conv_out_image_x - image_shape[0]) // 2
         conv_offset_y = (conv_out_image_y - image_shape[1]) // 2
         conv_offset = (conv_offset_x, conv_offset_y)
