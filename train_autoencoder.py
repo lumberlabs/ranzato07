@@ -3,6 +3,7 @@
 from __future__ import division
 
 import argparse
+import os
 try:
     import cPickle as pickle
 except ImportError:
@@ -105,7 +106,10 @@ def gradient_updates(score, params, learning_rate):
 
     return updates
 
-def train(training_data):
+def train(training_data,
+          output_directory=None,
+          filter_save_frequency=None):
+  
     input_image = T.matrix("input_image")
     filter_shape = (4, 1, 7, 7) # num filters, num inp filters, h, w
     image_shape = (1, 1, 17, 17) # batch size, num inp filters, h, w
@@ -155,6 +159,9 @@ def train(training_data):
                                    outputs=encoder_energy,
                                    updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.01))
 
+    if output_directory is not None:
+        print "Creating output directory {d}".format(d=output_directory)
+        os.makedirs(output_directory)
 
     for image_index, image in enumerate(training_data):
         encoded_features, encoded_locations = encode(image)
@@ -169,33 +176,17 @@ def train(training_data):
             keep_going = current_energy < prior_energy
             prior_energy = current_energy
 
-        # print "TOTAL", current_energy
-        # 
         decoder_energy = step_decoder(image, encoded_locations)
-        # print "DECODER", decoder_energy
         encoder_energy = step_encoder(image)
-        # print "ENCODER", encoder_energy
 
-        if image_index % 100 == 0:
-            print "Dumping images at image index {i}".format(i=image_index)
-            print "Ideal code", ideal_weights.get_value()
+        if output_directory is not None and image_index % filter_save_frequency == 0:
+            print "Saving filters at image index {i}".format(i=image_index)
             image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.W.get_value(), decoder_for_ideal_weights.W.get_value()],
                                         img_shape=(7, 7),
                                         tile_shape=(2, 4), 
                                         tile_spacing=(1, 1)))
-            image.save("all_filters_{i}.png".format(i=image_index))
-
-
-        # for x in xrange(500):
-        #     print step_down_energy(image, encoded_locations)
-
-        # print decoded_image
-        # 
-        # print encoded_features
-        # print encoded_locations
-        # print decoded_image
-        # print calc_decoder_energy(encoded_features, encoded_locations, image)
-        # print calc_encoder_energy(image, encoded_features)
+            image_filename = os.path.join(output_directory, "filters_{i}.png".format(i=image_index))
+            image.save(image_filename)
 
 def main(argv=None):
     if argv is None:
@@ -205,12 +196,21 @@ def main(argv=None):
     parser.add_argument("input_file",
                         help="input"
                        )
+    parser.add_argument("-o", "--output-directory",
+                        default="filters",
+                        help="directory in which to write the filters during training; if None, filters will not be written"
+                       )
+    parser.add_argument("-f", "--filter-save-frequency",
+                        type=int,
+                        default=200,
+                        help="save the filters to the output directory every n samples"
+                       )
     args = parser.parse_args()
 
     with open(args.input_file, "r") as f:
         training_data = pickle.load(f)
 
-    train(training_data)
+    train(training_data, output_directory=args.output_directory, filter_save_frequency=args.filter_save_frequency)
 
 
 if __name__ == '__main__':
