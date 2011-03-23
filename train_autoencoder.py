@@ -33,8 +33,9 @@ class Encoder(object):
 
         batch = self.image.reshape((1, 1, self.image_shape[2], self.image_shape[3])) # batch size, num inp filters, h, w
 
-        fan_in = numpy.prod(self.filter_shape[1:])
-        W_bound = numpy.sqrt(6.0 / fan_in)
+        # fan_in = numpy.prod(self.filter_shape[1:])
+        # W_bound = numpy.sqrt(6.0 / fan_in)
+        W_bound = 1 / 100.0
         W_values = numpy.asarray(self.numpy_rng.uniform(low=-W_bound, high=W_bound, size=self.filter_shape), dtype=floatX)
         self.W = theano.shared(name="W_c", value=W_values)
 
@@ -73,8 +74,9 @@ class Decoder(object):
         conv_offset_y = (image_shape[3] - conv_out_image_y) // 2
         conv_offset = (-conv_offset_x, -conv_offset_y)
 
-        fan_in = numpy.prod(filter_shape[1:])
-        W_bound = numpy.sqrt(6.0 / fan_in)
+        # fan_in = numpy.prod(filter_shape[1:])
+        # W_bound = numpy.sqrt(6.0 / fan_in)
+        W_bound = 1 / 100.0
         W_values = numpy.asarray(self.numpy_rng.uniform(low=-W_bound, high=W_bound, size=filter_shape), dtype=floatX)
         # W_values = numpy.ones(shape=filter_shape, dtype=floatX)
         self.W = theano.shared(name="W_d", value=W_values)
@@ -112,7 +114,7 @@ def train(training_data):
 
     features = T.vector("features")
     locations = T.imatrix("locations")
-    simple_decoder = Decoder(features, locations, encoder.W, image_shape, filter_shape)
+    # simple_decoder = Decoder(features, locations, encoder.W, image_shape, filter_shape)
     # decode = theano.function(inputs=[input_image, features, locations],
     #                          outputs=decoder.decoded)
     # calc_decoder_energy = theano.function(inputs=[input_image, features, locations],
@@ -138,12 +140,12 @@ def train(training_data):
     decoder_params = decoder_for_ideal_weights.params
     step_decoder = theano.function(inputs=[input_image, locations],
                                    outputs=decoder_energy,
-                                   updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.05))
+                                   updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.01))
 
     encoder_params = encoder.params
     step_encoder = theano.function(inputs=[input_image],
                                    outputs=encoder_energy,
-                                   updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.05))
+                                   updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.01))
 
 
     for image_index, image in enumerate(training_data):
@@ -169,16 +171,11 @@ def train(training_data):
         if image_index % 100 == 0:
             print "Dumping images at image index {i}".format(i=image_index)
             print "Ideal code", ideal_weights.get_value()
-            image = PIL.Image.fromarray(tile_raster_images(X=encoder.W.get_value(),
+            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder.W.get_value(), decoder_for_ideal_weights.W.get_value()],
                                         img_shape=(7, 7),
-                                        tile_shape=(2, 2), 
+                                        tile_shape=(2, 4), 
                                         tile_spacing=(1, 1)))
-            image.save("encoder_filters_{i}.png".format(i=image_index))
-            image = PIL.Image.fromarray(tile_raster_images(X=decoder_for_ideal_weights.W.get_value(),
-                                        img_shape=(7, 7),
-                                        tile_shape=(2, 2), 
-                                        tile_spacing=(1, 1)))
-            image.save("decoder_filters_{i}.png".format(i=image_index))
+            image.save("all_filters_{i}.png".format(i=image_index))
 
 
         # for x in xrange(500):
