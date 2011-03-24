@@ -102,7 +102,13 @@ class Decoder(object):
 
         def accumulate(code_elem, location, template, accumulated_so_far):
             filter_to_add = code_elem * template
-            addend = zeros_with_submatrix(filter_to_add, location, conv_offset, individual_filter_shape, image_shape)
+            # i'm not entirely clear on why this flipping is needed; i believe offhand
+            # that it is due to a side-effect of the convolution.
+            # everything trains up ok without it; this just makes the trained encoder and
+            # decoder filters look similar, rather than being flipped relative to each other,
+            # which is very satisfying. :)
+            filter_flipped = filter_to_add[::-1,::-1]
+            addend = zeros_with_submatrix(filter_flipped, location, conv_offset, individual_filter_shape, image_shape)
             return accumulated_so_far + addend
 
         scan_result, scan_updates = theano.scan(fn=accumulate,
