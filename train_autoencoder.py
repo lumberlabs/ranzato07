@@ -132,7 +132,7 @@ def gradient_updates(score, params, learning_rate):
 
 def train(training_data,
           output_directory=None,
-          filter_save_frequency=None):
+          save_frequency=None):
 
     image_variable = T.matrix("image")
     num_filters = 4
@@ -180,7 +180,10 @@ def train(training_data,
         print "Creating output directory {d}".format(d=output_directory)
         os.makedirs(output_directory)
 
+    summed_energy_since_last_print = 0
+
     for image_index, image in enumerate(training_data):
+
         encoded_code, encoded_locations = encode(image)
 
         # copy the actual code to the optimal code, to be optimized
@@ -195,24 +198,30 @@ def train(training_data,
             keep_going = current_energy < prior_energy
             prior_energy = current_energy
 
+        summed_energy_since_last_print += current_energy
+
         # found the optimal code; now take a single gradient descent step for decoder and encoder
         decoder_energy = step_decoder(image, encoded_locations)
         encoder_energy = step_encoder(image)
 
-        # write filters to file, for visualization
-        if output_directory is not None and image_index % filter_save_frequency == 0:
-            print "Saving filters at image {i}".format(i=image_index)
-            print "Total energy at image {i} is {e}".format(i=image_index, e=current_energy)
+        if image_index % save_frequency == 0:
+            # print "Saving filters at image {i}".format(i=image_index)
+            print "Average total energy at image {i} is {e:.2f}".format(i=image_index,
+                                                                        e=summed_energy_since_last_print / save_frequency)
+            summed_energy_since_last_print = 0
             encoder_filters = encoder.filters.get_value()
             decoder_filters = decoder_using_optimal_code.filters.get_value()
-            print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
-            print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
-            image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder_filters, decoder_filters],
-                                        img_shape=(7, 7),
-                                        tile_shape=(2, num_filters), 
-                                        tile_spacing=(1, 1)))
-            image_filename = os.path.join(output_directory, "filters_{i}.png".format(i=image_index))
-            image.save(image_filename)
+            # print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
+            # print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
+            if output_directory is not None:
+                rows_per_coder = 10
+                filters_image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder_filters, decoder_filters],
+                                                    img_shape=individual_filter_shape,
+                                                    tile_shape=(2 * rows_per_coder, num_filters // rows_per_coder),
+                                                    tile_spacing=(1, 1)))
+                image_filename = os.path.join(output_directory, "filters_{i}.png".format(i=image_index))
+                filters_image.save(image_filename)
+
 
 def main(argv=None):
     if argv is None:
@@ -226,17 +235,17 @@ def main(argv=None):
                         default="filters",
                         help="directory in which to write the filters during training; if None, filters will not be written"
                        )
-    parser.add_argument("-f", "--filter-save-frequency",
+    parser.add_argument("-s", "--save-frequency",
                         type=int,
                         default=200,
-                        help="save the filters to the output directory every n samples"
+                        help="print status info and save filters every n samples"
                        )
     args = parser.parse_args()
 
     with open(args.input_file, "r") as f:
         training_data = pickle.load(f)
+    train(training_data, output_directory=args.output_directory, save_frequency=args.save_frequency,
 
-    train(training_data, output_directory=args.output_directory, filter_save_frequency=args.filter_save_frequency)
 
 if __name__ == '__main__':
     sys.exit(main())
