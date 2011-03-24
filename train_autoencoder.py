@@ -133,12 +133,13 @@ def gradient_updates(score, params, learning_rate):
 def train(training_data,
           output_directory=None,
           save_frequency=None):
+    numpy_rng = numpy.random.RandomState(8912373)
 
     image_variable = T.matrix("image")
     num_filters = 4
     filter_shape = (num_filters, 7, 7) # num filters, r, c
     image_shape = (17, 17) # r, c
-    encoder = Encoder(image_variable, filter_shape, image_shape)
+    encoder = Encoder(image_variable, filter_shape, image_shape, numpy_rng=numpy_rng)
     encode = theano.function(inputs=[image_variable], outputs=[encoder.code, encoder.locations])
 
     locations_variable = T.imatrix("locations")
@@ -147,7 +148,7 @@ def train(training_data,
 
     # to create a decoder using the encoder's produced code, you'd do something similar, but use
     # encoder.code instead of optimal_code
-    decoder_using_optimal_code = Decoder(optimal_code, locations_variable, image_shape, filter_shape)
+    decoder_using_optimal_code = Decoder(optimal_code, locations_variable, image_shape, filter_shape, numpy_rng=numpy_rng)
 
     decoder_energy = decoder_using_optimal_code.decoder_energy(image_variable) # compare with original input image
     encoder_energy = encoder.encoder_energy(optimal_code) # compare against a calculated optimal code
