@@ -52,8 +52,6 @@ class Encoder(object):
 
         self.locations = T.cast(locations_upcast, "int32") # the // and % upcast from int32 to int64; cast back down
 
-        self.params = [self.filters]
-
     def encoder_energy(self, wrt_code):
         return ((self.code - wrt_code) ** 2).sum()
 
@@ -116,7 +114,6 @@ class Decoder(object):
                                                 sequences=[code, locations, self.filters])
 
         self.decoded = scan_result[-1]
-        self.params = [self.filters]
 
     def decoder_energy(self, wrt_image):
         return ((self.decoded - wrt_image) ** 2).sum()
@@ -167,12 +164,12 @@ def train(training_data,
                                   outputs=total_energy,
                                   updates=gradient_updates(total_energy, energy_params, learning_rate=0.05))
 
-    decoder_params = decoder_using_optimal_code.params
+    decoder_params = [decoder_using_optimal_code.filters]
     step_decoder = theano.function(inputs=[image_variable, locations_variable],
                                    outputs=decoder_energy,
                                    updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.01))
 
-    encoder_params = encoder.params
+    encoder_params = [encoder.filters]
     step_encoder = theano.function(inputs=[image_variable],
                                    outputs=encoder_energy,
                                    updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.01))
