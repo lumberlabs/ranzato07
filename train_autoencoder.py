@@ -185,6 +185,24 @@ def train(training_data,
 
     for image_index, image in enumerate(training_data):
 
+        if image_index % save_frequency == 0:
+            # print "Saving filters at image {i}".format(i=image_index)
+            print "Average total energy at image {i} is {e:.2f}".format(i=image_index,
+                                                                        e=summed_energy_since_last_print / save_frequency)
+            summed_energy_since_last_print = 0
+            encoder_filters = encoder.filters.get_value()
+            decoder_filters = decoder_using_optimal_code.filters.get_value()
+            # print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
+            # print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
+            if output_directory is not None:
+                rows_per_coder = 10
+                filters_image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder_filters, decoder_filters],
+                                                    img_shape=individual_filter_shape,
+                                                    tile_shape=(2 * rows_per_coder, num_filters // rows_per_coder),
+                                                    tile_spacing=(1, 1)))
+                image_filename = os.path.join(output_directory, "filters_{i}.png".format(i=image_index))
+                filters_image.save(image_filename)
+
         encoded_code, encoded_locations = encode(image)
 
         # copy the actual code to the optimal code, to be optimized
@@ -204,25 +222,6 @@ def train(training_data,
         # found the optimal code; now take a single gradient descent step for decoder and encoder
         decoder_energy = step_decoder(image, encoded_locations)
         encoder_energy = step_encoder(image)
-
-        if image_index % save_frequency == 0:
-            # print "Saving filters at image {i}".format(i=image_index)
-            print "Average total energy at image {i} is {e:.2f}".format(i=image_index,
-                                                                        e=summed_energy_since_last_print / save_frequency)
-            summed_energy_since_last_print = 0
-            encoder_filters = encoder.filters.get_value()
-            decoder_filters = decoder_using_optimal_code.filters.get_value()
-            # print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
-            # print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
-            if output_directory is not None:
-                rows_per_coder = 10
-                filters_image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder_filters, decoder_filters],
-                                                    img_shape=individual_filter_shape,
-                                                    tile_shape=(2 * rows_per_coder, num_filters // rows_per_coder),
-                                                    tile_spacing=(1, 1)))
-                image_filename = os.path.join(output_directory, "filters_{i}.png".format(i=image_index))
-                filters_image.save(image_filename)
-
 
 def main(argv=None):
     if argv is None:
