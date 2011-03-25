@@ -43,7 +43,9 @@ class Encoder(object):
 
         # rasterize each convolved image, since max_and_argmax doesn't accept multiple axes
         convolved_rasterized = convolved.reshape((num_filters, -1))
-        self.code, argmax_raveled = T.max_and_argmax(convolved_rasterized, axis=-1)
+        raw_code, argmax_raveled = T.max_and_argmax(convolved_rasterized, axis=-1)
+
+        self.code = T.tanh(raw_code)
 
         # now unravel the argmax value to undo the rasterization
         argmax_row = argmax_raveled // convolved_rows
