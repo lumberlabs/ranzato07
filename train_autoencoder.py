@@ -3,6 +3,8 @@
 from __future__ import division
 
 import argparse
+import contextlib
+import gzip
 import math
 import os
 try:
@@ -276,6 +278,19 @@ def train(training_data,
         current_reconstruction_error = calculate_reconstruction_error(image)
         summed_reconstruction_error_since_last_print += current_reconstruction_error
 
+def load_mnist_training_images(mnist_filename):
+    with contextlib.closing(gzip.open(mnist_filename, "rb")) as mnist_file:
+        mnist_data = pickle.load(mnist_file)
+    mnist_training_set = mnist_data[0] # [1] is validation, [2] is test
+    mnist_training_images = mnist_training_set[0] # [1] is labels
+    mnist_training_images.shape = (50000, 28, 28)
+    return mnist_training_images
+
+def load_toy_training_images(toy_filename):
+    with open(toy_filename, "rb") as toy_file:
+        training_data = pickle.load(toy_file)
+    return training_data
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
@@ -300,8 +315,10 @@ def main(argv=None):
                        )
     args = parser.parse_args()
 
-    with open(args.input_file, "r") as f:
-        training_data = pickle.load(f)
+    if os.path.basename(args.input_file) == "mnist.pkl.gz":
+        training_data = load_mnist_training_images(args.input_file)
+    else:
+        training_data = load_toy_training_images(args.input_file)
 
     train(training_data,
           output_directory=args.output_directory,
