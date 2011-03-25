@@ -248,6 +248,7 @@ def main(argv=None):
 
     with open(args.input_file, "r") as f:
         training_data = pickle.load(f)
+
     train(training_data,
           output_directory=args.output_directory,
           save_frequency=args.save_frequency,
