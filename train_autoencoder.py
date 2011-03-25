@@ -234,8 +234,6 @@ def train(training_data,
 
             encoder_filters = encoder.filters.get_value()
             decoder_filters = decoder_for_optimal_code.filters.get_value()
-            # print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
-            # print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
             if output_directory is not None:
                 # make the output roughly square; encoders will be on the top half, decoders on the bottom
                 # chop off the filters so that each set of filters perfectly fills its half-square
