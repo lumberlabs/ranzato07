@@ -194,8 +194,13 @@ def train(training_data,
             # print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
             # print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
             if output_directory is not None:
-                rows_per_coder = 10
-                filters_image = PIL.Image.fromarray(tile_raster_images(X=numpy.r_[encoder_filters, decoder_filters],
+                # make the output roughly square; encoders will be on the top half, decoders on the bottom
+                # chop off the filters so that each set of filters perfectly fills its half-square
+                rows_per_coder = int(math.floor(math.sqrt(num_filters / 2)))
+                display_filters_per_coder = (num_filters // rows_per_coder) * rows_per_coder
+                combined_display_filters = numpy.r_[encoder_filters[:display_filters_per_coder],
+                                                    decoder_filters[:display_filters_per_coder]]
+                filters_image = PIL.Image.fromarray(tile_raster_images(X=combined_display_filters,
                                                     img_shape=individual_filter_shape,
                                                     tile_shape=(2 * rows_per_coder, num_filters // rows_per_coder),
                                                     tile_spacing=(1, 1)))
