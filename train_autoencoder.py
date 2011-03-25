@@ -129,13 +129,15 @@ def gradient_updates(score, params, learning_rate):
 
 def train(training_data,
           output_directory=None,
-          save_frequency=None):
+          save_frequency=None,
+          num_filters=None):
+
     numpy_rng = numpy.random.RandomState(8912373)
 
     image_variable = T.matrix("image")
-    num_filters = 4
-    filter_shape = (num_filters, 7, 7) # num filters, r, c
     image_shape = (17, 17) # r, c
+    individual_filter_shape = (7, 7)
+    filter_shape = (num_filters, individual_filter_shape[0], individual_filter_shape[1]) # num filters, r, c
     encoder = Encoder(image_variable, filter_shape, image_shape, numpy_rng=numpy_rng)
     encode = theano.function(inputs=[image_variable], outputs=[encoder.code, encoder.locations])
 
@@ -237,11 +239,19 @@ def main(argv=None):
                         default=200,
                         help="print status info and save filters every n samples"
                        )
+    parser.add_argument("-f", "--num_filters",
+                        type=int,
+                        default=50,
+                        help="number of filters to train"
+                       )
     args = parser.parse_args()
 
     with open(args.input_file, "r") as f:
         training_data = pickle.load(f)
-    train(training_data, output_directory=args.output_directory, save_frequency=args.save_frequency,
+    train(training_data,
+          output_directory=args.output_directory,
+          save_frequency=args.save_frequency,
+          num_filters=args.num_filters)
 
 
 if __name__ == '__main__':
