@@ -52,8 +52,8 @@ class Encoder(object):
         self.code = T.tanh(raw_code)
 
         # now unravel the argmax value to undo the rasterization
-        argmax_row = argmax_raveled // convolved_rows
-        argmax_col = argmax_raveled % convolved_rows
+        argmax_row = argmax_raveled // convolved_cols
+        argmax_col = argmax_raveled % convolved_cols
         locations_upcast = T.stack(argmax_row, argmax_col).T
 
         self.locations = T.cast(locations_upcast, "int32") # the // and % upcast from int32 to int64; cast back down
