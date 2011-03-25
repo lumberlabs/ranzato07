@@ -10,6 +10,7 @@ try:
 except ImportError:
     import pickle
 import sys
+import time
 
 import PIL.Image
 import numpy
@@ -166,7 +167,7 @@ def train(training_data,
 
     energy_params = [optimal_code]
     step_energy = theano.function(inputs=[image_variable, locations_variable],
-                                  outputs=total_energy,
+                                  outputs=[total_energy, encoder_energy, decoder_energy, L1_code_penalty],
                                   updates=gradient_updates(total_energy, energy_params, learning_rate=0.05))
 
     decoder_params = [decoder_using_optimal_code.filters]
@@ -183,15 +184,36 @@ def train(training_data,
         print "Creating output directory {d}".format(d=output_directory)
         os.makedirs(output_directory)
 
-    summed_energy_since_last_print = 0
+    summed_total_energy_since_last_print = 0
+    summed_encoder_energy_since_last_print = 0
+    summed_decoder_energy_since_last_print = 0
+    summed_L1_code_penalty_since_last_print = 0
+    code_optimization_steps_since_last_print = 0
+    last_print_time = time.time()
 
     for image_index, image in enumerate(training_data):
 
         if image_index % save_frequency == 0:
-            # print "Saving filters at image {i}".format(i=image_index)
-            print "Average total energy at image {i} is {e:.2f}".format(i=image_index,
-                                                                        e=summed_energy_since_last_print / save_frequency)
-            summed_energy_since_last_print = 0
+            print "Image {i}: Avg energy {e:.2f} " \
+                  "(= {nw} * {n:.2f} + {dw} * {d:.2f} + {lw} * {l:.2f}), " \
+                  "avg code optimization steps {c:.2f}, " \
+                  "avg elapsed {t:.2f}s".format(i=image_index,
+                                                e=summed_total_energy_since_last_print / save_frequency,
+                                                n=summed_encoder_energy_since_last_print / save_frequency,
+                                                nw=encoder_energy_weight,
+                                                d=summed_decoder_energy_since_last_print / save_frequency,
+                                                dw=decoder_energy_weight,
+                                                l=summed_L1_code_penalty_since_last_print / save_frequency,
+                                                lw=L1_code_penalty_weight,
+                                                c=code_optimization_steps_since_last_print / save_frequency,
+                                                t=(time.time() - last_print_time) / save_frequency)
+            summed_total_energy_since_last_print = 0
+            summed_encoder_energy_since_last_print = 0
+            summed_decoder_energy_since_last_print = 0
+            summed_L1_code_penalty_since_last_print = 0
+            code_optimization_steps_since_last_print = 0
+            last_print_time = time.time()
+
             encoder_filters = encoder.filters.get_value()
             decoder_filters = decoder_using_optimal_code.filters.get_value()
             # print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
@@ -217,14 +239,18 @@ def train(training_data,
 
         # hack: search for optimal code only so long as we're making immediate progress
         # todo: incorporate patience here
-        prior_energy = float("inf")
+        prior_total_energy = float("inf")
         keep_going = True
         while keep_going:
-            current_energy = step_energy(image, encoded_locations)
-            keep_going = current_energy < prior_energy
-            prior_energy = current_energy
+            current_total_energy, current_encoder_energy, current_decoder_energy, current_L1_code_penalty  = step_energy(image, encoded_locations)
+            keep_going = current_total_energy < prior_total_energy
+            prior_total_energy = current_total_energy
+            code_optimization_steps_since_last_print += 1
 
-        summed_energy_since_last_print += current_energy
+        summed_total_energy_since_last_print += current_total_energy
+        summed_encoder_energy_since_last_print += current_encoder_energy
+        summed_decoder_energy_since_last_print += current_decoder_energy
+        summed_L1_code_penalty_since_last_print += current_L1_code_penalty
 
         # found the optimal code; now take a single gradient descent step for decoder and encoder
         step_decoder(image, encoded_locations)
