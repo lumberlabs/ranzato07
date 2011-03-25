@@ -132,12 +132,12 @@ def gradient_updates(score, params, learning_rate):
 def train(training_data,
           output_directory=None,
           save_frequency=None,
-          num_filters=None):
+          num_filters=None,
+          image_shape=None):
 
     numpy_rng = numpy.random.RandomState(8912373)
 
     image_variable = T.matrix("image")
-    image_shape = (17, 17) # r, c
     individual_filter_shape = (7, 7)
     filter_shape = (num_filters, individual_filter_shape[0], individual_filter_shape[1]) # num filters, r, c
     encoder = Encoder(image_variable, filter_shape, image_shape, numpy_rng=numpy_rng)
@@ -259,7 +259,8 @@ def main(argv=None):
     train(training_data,
           output_directory=args.output_directory,
           save_frequency=args.save_frequency,
-          num_filters=args.num_filters)
+          num_filters=args.num_filters,
+          image_shape=training_data[0].shape)
 
 
 if __name__ == '__main__':
