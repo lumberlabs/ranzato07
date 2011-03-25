@@ -155,9 +155,9 @@ def train(training_data,
     encoder_energy = encoder.encoder_energy(optimal_code) # compare against a calculated optimal code
     L1_code_penalty = abs(optimal_code).sum()
 
-    encoder_energy_weight = 5
+    encoder_energy_weight = 1
     decoder_energy_weight = 1
-    L1_code_penalty_weight = 2
+    L1_code_penalty_weight = 0
 
     total_energy = encoder_energy_weight * encoder_energy + \
                    decoder_energy_weight * decoder_energy + \
