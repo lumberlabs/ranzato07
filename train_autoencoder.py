@@ -168,12 +168,12 @@ def train(training_data,
 
     decoder_params = [decoder_using_optimal_code.filters]
     step_decoder = theano.function(inputs=[image_variable, locations_variable],
-                                   outputs=decoder_energy,
+                                   outputs=None,
                                    updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.01))
 
     encoder_params = [encoder.filters]
     step_encoder = theano.function(inputs=[image_variable],
-                                   outputs=encoder_energy,
+                                   outputs=None,
                                    updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.01))
 
     if output_directory is not None and not os.path.isdir(output_directory):
@@ -219,8 +219,8 @@ def train(training_data,
         summed_energy_since_last_print += current_energy
 
         # found the optimal code; now take a single gradient descent step for decoder and encoder
-        decoder_energy = step_decoder(image, encoded_locations)
-        encoder_energy = step_encoder(image)
+        step_decoder(image, encoded_locations)
+        step_encoder(image)
 
 def main(argv=None):
     if argv is None:
