@@ -33,8 +33,8 @@ class Encoder(object):
         # TODO: This is completely unmotivated. It comes purely from the observation that
         # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 2 * 7 * 7. :/
         fan_in = numpy.prod(individual_filter_shape)
-        filters_elem_bound = 1 / (2 * fan_in) 
-        filters_value = numpy.asarray(numpy_rng.uniform(low=-filters_elem_bound, high=filters_elem_bound, size=filter_shape), dtype=floatX)
+        filters_elem_bound = 1 / fan_in
+        filters_value = numpy.asarray(numpy_rng.uniform(low=0, high=filters_elem_bound, size=filter_shape), dtype=floatX)
 
         self.filters = theano.shared(name="encoder_filters", value=filters_value)
 
@@ -87,8 +87,8 @@ class Decoder(object):
         # TODO: This is completely unmotivated. It comes purely from the observation that
         # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 2 * 7 * 7. :/
         fan_in = numpy.prod(individual_filter_shape)
-        filters_elem_bound = 1 / (2 * fan_in) 
-        filters_value = numpy.asarray(numpy_rng.uniform(low=-filters_elem_bound, high=filters_elem_bound, size=filter_shape), dtype=floatX)
+        filters_elem_bound = 1 / fan_in
+        filters_value = numpy.asarray(numpy_rng.uniform(low=0, high=filters_elem_bound, size=filter_shape), dtype=floatX)
 
         self.filters = theano.shared(name="decoder_filters", value=filters_value)
 
