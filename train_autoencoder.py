@@ -152,9 +152,13 @@ def train(training_data,
 
     optimal_code = theano.shared(name="optimal_code", value=numpy.zeros((num_filters,), dtype=floatX))
 
-    # to create a decoder using the encoder's produced code, you'd do something similar, but use
-    # encoder.code instead of optimal_code
+    # this decoder decodes based on optimal_code (above), and is used during training to find and use
+    # that optimal code
     decoder_for_optimal_code = Decoder(optimal_code, locations_variable, image_shape, filter_shape, numpy_rng=numpy_rng)
+    # this decoder directly decodes the output of encoder (above)
+    # it is used to track training quality by measuring the reconstruction error;
+    # it is not used in the training itself, so we just alias its filters to the trained decoder's filters.
+    decoder = Decoder(encoder.code, encoder.locations, image_shape, filter_shape, aliased_filters=decoder_for_optimal_code.filters, numpy_rng=numpy_rng)
 
     decoder_energy = decoder_for_optimal_code.decoder_energy(image_variable) # compare with original input image
     encoder_energy = encoder.encoder_energy(optimal_code) # compare against a calculated optimal code
@@ -183,6 +187,10 @@ def train(training_data,
                                    outputs=None,
                                    updates=gradient_updates(encoder_energy, encoder_params, learning_rate=0.01))
 
+    reconstruction_error = decoder.decoder_energy(image_variable) # decodes encoder's output, and compares to its input
+    calculate_reconstruction_error = theano.function(inputs=[image_variable],
+                                                     outputs=reconstruction_error)
+
     if output_directory is not None and not os.path.isdir(output_directory):
         print "Creating output directory {d}".format(d=output_directory)
         os.makedirs(output_directory)
@@ -191,6 +199,7 @@ def train(training_data,
     summed_encoder_energy_since_last_print = 0
     summed_decoder_energy_since_last_print = 0
     summed_L1_code_penalty_since_last_print = 0
+    summed_reconstruction_error_since_last_print = 0
     code_optimization_steps_since_last_print = 0
     last_print_time = time.time()
 
@@ -199,21 +208,25 @@ def train(training_data,
         if image_index % save_frequency == 0:
             print "Image {i}: Avg energy {e:.2f} " \
                   "(= {nw} * {n:.2f} + {dw} * {d:.2f} + {lw} * {l:.2f}), " \
-                  "avg code optimization steps {c:.2f}, " \
-                  "avg elapsed {t:.2f}s".format(i=image_index,
-                                                e=summed_total_energy_since_last_print / save_frequency,
-                                                n=summed_encoder_energy_since_last_print / save_frequency,
-                                                nw=encoder_energy_weight,
-                                                d=summed_decoder_energy_since_last_print / save_frequency,
-                                                dw=decoder_energy_weight,
-                                                l=summed_L1_code_penalty_since_last_print / save_frequency,
-                                                lw=L1_code_penalty_weight,
-                                                c=code_optimization_steps_since_last_print / save_frequency,
-                                                t=(time.time() - last_print_time) / save_frequency)
+                  "avg optimal code steps {c:.2f}, " \
+                  "avg recon err {r:.2f}, " \
+                  "avg time {t:.2f}s" \
+                  "".format(i=image_index,
+                            e=summed_total_energy_since_last_print / save_frequency,
+                            n=summed_encoder_energy_since_last_print / save_frequency,
+                            nw=encoder_energy_weight,
+                            d=summed_decoder_energy_since_last_print / save_frequency,
+                            dw=decoder_energy_weight,
+                            l=summed_L1_code_penalty_since_last_print / save_frequency,
+                            lw=L1_code_penalty_weight,
+                            c=code_optimization_steps_since_last_print / save_frequency,
+                            r=summed_reconstruction_error_since_last_print / save_frequency,
+                            t=(time.time() - last_print_time) / save_frequency)
             summed_total_energy_since_last_print = 0
             summed_encoder_energy_since_last_print = 0
             summed_decoder_energy_since_last_print = 0
             summed_L1_code_penalty_since_last_print = 0
+            summed_reconstruction_error_since_last_print = 0
             code_optimization_steps_since_last_print = 0
             last_print_time = time.time()
 
@@ -258,6 +271,10 @@ def train(training_data,
         # found the optimal code; now take a single gradient descent step for decoder and encoder
         step_decoder(image, encoded_locations)
         step_encoder(image)
+
+        # calculate reconstruction error
+        current_reconstruction_error = calculate_reconstruction_error(image)
+        summed_reconstruction_error_since_last_print += current_reconstruction_error
 
 def main(argv=None):
     if argv is None:
