@@ -303,7 +303,7 @@ def load_blosc_training_images(blosc_filename):
     """
     import blosc
     with open(blosc_filename, "rb") as blosc_file:
-      images_and_labels = cPickle.load(blosc_file)
+      images_and_labels = pickle.load(blosc_file)
     images_compressed = images_and_labels[0]
     images_array = blosc.unpack_array(images_compressed)
     images_array.shape = (-1, 27, 19)
