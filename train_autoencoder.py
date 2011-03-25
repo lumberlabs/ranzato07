@@ -151,9 +151,9 @@ def train(training_data,
 
     # to create a decoder using the encoder's produced code, you'd do something similar, but use
     # encoder.code instead of optimal_code
-    decoder_using_optimal_code = Decoder(optimal_code, locations_variable, image_shape, filter_shape, numpy_rng=numpy_rng)
+    decoder_for_optimal_code = Decoder(optimal_code, locations_variable, image_shape, filter_shape, numpy_rng=numpy_rng)
 
-    decoder_energy = decoder_using_optimal_code.decoder_energy(image_variable) # compare with original input image
+    decoder_energy = decoder_for_optimal_code.decoder_energy(image_variable) # compare with original input image
     encoder_energy = encoder.encoder_energy(optimal_code) # compare against a calculated optimal code
     L1_code_penalty = abs(optimal_code).sum()
 
@@ -170,7 +170,7 @@ def train(training_data,
                                   outputs=[total_energy, encoder_energy, decoder_energy, L1_code_penalty],
                                   updates=gradient_updates(total_energy, energy_params, learning_rate=0.05))
 
-    decoder_params = [decoder_using_optimal_code.filters]
+    decoder_params = [decoder_for_optimal_code.filters]
     step_decoder = theano.function(inputs=[image_variable, locations_variable],
                                    outputs=None,
                                    updates=gradient_updates(decoder_energy, decoder_params, learning_rate=0.01))
@@ -215,7 +215,7 @@ def train(training_data,
             last_print_time = time.time()
 
             encoder_filters = encoder.filters.get_value()
-            decoder_filters = decoder_using_optimal_code.filters.get_value()
+            decoder_filters = decoder_for_optimal_code.filters.get_value()
             # print "Encoder filter min {n}, max {x}".format(n=numpy.min(encoder_filters), x=numpy.max(encoder_filters))
             # print "Decoder filter min {n}, max {x}".format(n=numpy.min(decoder_filters), x=numpy.max(decoder_filters))
             if output_directory is not None:
