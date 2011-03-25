@@ -53,7 +53,13 @@ def main(argv=None):
                         required=True,
                         help="number of samples to produce"
                        )
+    parser.add_argument("-r", "--random-seed",
+                        type=int,
+                        help="rng seed, for reproducibility"
+                       )
     args = parser.parse_args()
+
+    random.seed(args.random_seed) # if no seed is provided, args.random_seed defaults to None, which seeds randomly
 
     sample_patches = numpy.asarray([generate_sample_patch() for sample_num in xrange(args.num_samples)])
     with open(args.output_filename, "wb") as outfile:
