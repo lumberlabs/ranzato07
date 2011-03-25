@@ -301,7 +301,8 @@ def main(argv=None):
                        )
     parser.add_argument("-o", "--output-directory",
                         default="filters",
-                        help="directory in which to write the filters during training; if None, filters will not be written"
+                        nargs="?",
+                        help="directory in which to write the filters during training; if -o is passed empty, filters images will not be written"
                        )
     parser.add_argument("-s", "--save-frequency",
                         type=int,
