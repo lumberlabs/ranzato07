@@ -79,7 +79,7 @@ def zeros_with_submatrix(submatrix, center_location, offset, submatrix_shape, de
 
 class Decoder(object):
 
-    def __init__(self, code, locations, image_shape, filter_shape, numpy_rng=None):
+    def __init__(self, code, locations, image_shape, filter_shape, aliased_filters=None, numpy_rng=None):
         if numpy_rng is None:
             numpy_rng = numpy.random.RandomState()
 
@@ -88,13 +88,16 @@ class Decoder(object):
         num_filters = filter_shape[0]
         individual_filter_shape = filter_shape[1:]
 
-        # TODO: This is completely unmotivated. It comes purely from the observation that
-        # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 2 * 7 * 7. :/
-        fan_in = numpy.prod(individual_filter_shape)
-        filters_elem_bound = 1 / fan_in
-        filters_value = numpy.asarray(numpy_rng.uniform(low=0, high=filters_elem_bound, size=filter_shape), dtype=floatX)
-
-        self.filters = theano.shared(name="decoder_filters", value=filters_value)
+        if aliased_filters is None:
+            # TODO: This is completely unmotivated. It comes purely from the observation that
+            # initializing W_bound = 1/100 works pretty well for a 7x7 filter, and 100 ~= 2 * 7 * 7. :/
+            # This needs experimentation for other filter shapes.
+            fan_in = numpy.prod(individual_filter_shape)
+            filters_elemwise_bound = 1 / fan_in
+            filters_value = numpy.asarray(numpy_rng.uniform(low=0, high=filters_elemwise_bound, size=filter_shape), dtype=floatX)
+            self.filters = theano.shared(name="decoder_filters", value=filters_value)
+        else:
+            self.filters = aliased_filters
 
         convolved_dims = theano.tensor.nnet.conv.ConvOp.getOutputShape(image_shape, individual_filter_shape)
 
