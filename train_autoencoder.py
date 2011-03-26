@@ -248,6 +248,13 @@ def train(training_data,
                 image_filename = os.path.join(output_directory, "filters_{i}.png".format(i=image_index))
                 filters_image.save(image_filename)
 
+                # dump the filters to a file, for re-use
+                filters_dict = {"encoder": encoder.filters.get_value(),
+                                "decoder": decoder.filters.get_value()}
+                saved_filters_filename = os.path.join(output_directory, "saved_filters_{i}.pkl".format(i=image_index))
+                with open(saved_filters_filename, "wb") as saved_filters_file:
+                    pickle.dump(filters_dict, saved_filters_file, protocol=pickle.HIGHEST_PROTOCOL)
+
         encoded_code, encoded_locations = encode(image)
 
         # copy the actual code to the optimal code, to be optimized
