@@ -46,7 +46,7 @@ class Encoder(object):
         convolved_rows, convolved_cols = theano.tensor.nnet.conv.ConvOp.getOutputShape(image_shape, individual_filter_shape)
 
         # rasterize each convolved image, since max_and_argmax doesn't accept multiple axes
-        convolved_rasterized = convolved.reshape((num_filters, -1))
+        convolved_rasterized = convolved.reshape((num_filters, convolved_rows * convolved_cols))
         raw_code, argmax_raveled = T.max_and_argmax(convolved_rasterized, axis=-1)
 
         self.code = T.tanh(raw_code)
